@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script type="text/javascript" src="https://www.gstatic.com/charts/loader.js"></script>
+    <script type="text/javascript">
+        google.charts.load('current', {'packages':['corechart']});
+        google.charts.setOnLoadCallback(initDashboard);
+
+        var temperatureData = [['Time', 'Temperature']];
+        var pressureData = [['Time', 'Pressure']];
+        var co2Data = [['Time', 'CO2']];
+        var gpioData = [['Time', 'GPIO 35', 'GPIO 36']];
+        var intervalId;
+        var fetchInterval = 5000; // Default interval of 5 seconds
+
+        function initDashboard() {
+            $('#intervalDropdown').val(fetchInterval);
+            $('#intervalDropdown').change(function() {
+                fetchInterval = $(this).val();
+                clearInterval(intervalId);
+                intervalId = setInterval(fetchData, fetchInterval);
+            });
+
+            fetchData();
+            intervalId = setInterval(fetchData, fetchInterval);
+        }
+
+        function fetchData() {
+            $.getJSON("/?q=all", function(data) {
+                updateChartData(temperatureData, data.temperature, data.date_time, 'temperature_chart', 'Temperature History', 'latest_temperature');
+                updateChartData(pressureData, data.pressure, data.date_time, 'pressure_chart', 'Pressure History', 'latest_pressure');
+                updateChartData(co2Data, data.co2, data.date_time, 'co2_chart', 'CO2 History', 'latest_co2');
+                updateGPIOData(gpioData, data.gpio35, data.gpio36, data.date_time, 'gpio_chart', 'GPIO Pins History', 'latest_gpio');
+            });
+        }
+
+        function updateChartData(chartData, newData, currentTime, elementId, title, latestElementId) {
+            var time = currentTime.split(' ')[1];
+            
+            chartData.push([time, newData]);
+            if (chartData.length > 51) {
+                chartData.splice(1, 1); // Remove the oldest data point
+            }
+
+            var dataTable = google.visualization.arrayToDataTable(chartData);
+            var options = {
+                title: title,
+                curveType: 'function',
+                legend: { position: 'bottom' }
+            };
+            var chart = new google.visualization.LineChart(document.getElementById(elementId));
+            chart.draw(dataTable, options);
+
+            document.getElementById(latestElementId).innerText = `Latest Value: ${newData} at ${currentTime}`;
+        }
+
+        function updateGPIOData(chartData, newGpio35, newGpio36, currentTime, elementId, title, latestElementId) {
+            var time = currentTime.split(' ')[1];
+
+            chartData.push([time, newGpio35, newGpio36]);
+            if (chartData.length > 51) {
+                chartData.splice(1, 1); // Remove the oldest data point
+            }
+
+            var dataTable = google.visualization.arrayToDataTable(chartData);
+            var options = {
+                title: title,
+                curveType: 'function',
+                legend: { position: 'bottom' }
+            };
+            var chart = new google.visualization.LineChart(document.getElementById(elementId));
+            chart.draw(dataTable, options);
+
+            document.getElementById(latestElementId).innerText = `Latest Values: GPIO 35: ${newGpio35}, GPIO 36: ${newGpio36} at ${currentTime}`;
+        }
+    </script>
+</head>
+<body>
+    <div class="container mt-5">
+        <h1 class="mb-4">Dashboard</h1>
+        <div class="row mb-3">
+            <div class="col-md-3">
+                <label for="intervalDropdown" class="form-label">Fetch Interval (seconds)</label>
+                <select id="intervalDropdown" class="form-select">
+                    <option value="1000">1</option>
+                    <option value="2000">2</option>
+                    <option value="3000">3</option>
+                    <option value="4000">4</option>
+                    <option value="5000" selected>5</option>
+                    <option value="10000">10</option>
+                    <option value="15000">15</option>
+                </select>
+            </div>
+        </div>        
+        <hr>
+        <div class="row">
+            <div class="col-md-12">
+                <h2>Temperature</h2>
+                <p id="latest_temperature" class="text-center"></p>
+                <div id="temperature_chart" style="width: 100%; height: 500px;"></div>
+                <hr>
+            </div>
+        </div>
+        <div class="row">
+            <div class="col-md-12">
+                <h2>Pressure</h2>
+                <p id="latest_pressure" class="text-center"></p>
+                <div id="pressure_chart" style="width: 100%; height: 500px;"></div>
+                <hr>
+            </div>
+        </div>
+        <div class="row">
+            <div class="col-md-12">
+                <h2>Co2</h2>
+                <p id="latest_co2" class="text-center"></p>
+                <div id="co2_chart" style="width: 100%; height: 500px;"></div>
+                <hr>
+            </div>
+        </div>
+        <div class="row">
+            <div class="col-md-12">
+                <h2>GPIO Pins</h2>
+                <p id="latest_gpio" class="text-center"></p>
+                <div id="gpio_chart" style="width: 100%; height: 500px;"></div>
+                <hr>
+            </div>
+        </div>
+        <footer class="text-center mt-4">
+            <p>1999 - 2024 Infineon Technologies AG ,  GPL v2, Developer: Powen Ko</p>
+        </footer>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

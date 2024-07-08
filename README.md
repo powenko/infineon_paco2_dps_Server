@@ -98,7 +98,16 @@ The `measure_co2` method triggers the sensor to perform a CO2 concentration meas
 
 ####  Links
 Infineon optimus Board
+
 Hard can be purchased at [www.ifroglab.com](http://www.ifroglab.com).
-infineon_paco2_dps_lib GitHub Repository  [Infineon's PA_CO2 and DPS sensors library and example code] (hhttps://github.com/powenko/infineon_paco2_dps_lib)
+
+infineon_paco2_dps_lib GitHub Repository  [Infineon's PA_CO2 and DPS sensors library and example code] (https://github.com/powenko/infineon_paco2_dps_lib)
+
 infineon_paco2_dps_lib on PyPI  [Python pip library] (https://pypi.org/project/infineon-paco2-dps-lib/)
+
 infineon_paco2_dps_Server GitHub Repository [Infineon's PA_CO2 and DPS sensors  Server code]  (https://github.com/powenko/infineon_paco2_dps_Server)
+
+
+
+####  screen shot
+![PCB Board](https://github.com/powenko/infineon_paco2_dps_lib/raw/master/01_Server.png)
