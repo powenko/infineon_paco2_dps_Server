@@ -1,0 +1,6 @@
+smbus2
+qrcode
+requests
+pillow
+pyperclip
+RPi.GPIO==0.7.1
