@@ -110,7 +110,7 @@ infineon_paco2_dps_Server GitHub Repository [Infineon's PA_CO2 and DPS sensors  
 
 
 ####  screen shot
-![PCB Board](https://github.com/powenko/infineon_paco2_dps_lib/raw/master/01_Server.png)
+![PCB Board](https://github.com/powenko/infineon_paco2_dps_lib/raw/master/IMG_0001.jpg)
 ![Server](https://github.com/powenko/infineon_paco2_dps_Server/blob/master/docs/01_server.png?raw=true) 
 ![web page](https://github.com/powenko/infineon_paco2_dps_Server/blob/master/docs/02_webpage.png?raw=true) 
 ![json data](https://github.com/powenko/infineon_paco2_dps_Server/blob/master/docs/03_alljson.png) 
