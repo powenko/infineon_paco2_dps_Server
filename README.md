@@ -132,3 +132,10 @@ dashboard
 
 
 
+
+## Demo Videos
+1. Infineon Optimus Demo Board APP and Web Interface: [Watch here](https://youtu.be/-iRGEoUa1io?si=vimSlJIAxyVxAAlv)
+2. Infineon Optimus Demo Board and Android App: [Watch here](https://www.youtube.com/watch?v=KRHW_eWe6gE&t=1s)
+3. Infineon Optimus Demo Board Android APP Demo: [Watch here](https://www.youtube.com/watch?v=MuXcFOH79jo&t=2s)
+
+
