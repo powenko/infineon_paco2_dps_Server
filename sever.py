@@ -1,3 +1,24 @@
+"""
+DPS Sensor Library for infineon optimus board
+
+This library provides functions to interface with the Infineon DPS310 pressure sensor.
+
+Author: Powen Ko
+Email: powenkoads@gmail.com
+
+Infineon Optimus Board can be purchased at www.ifroglab.com
+
+Copyright (c) 2024 Powen Ko & infineon
+
+GPT License v3:
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+
+"""
+
+
 
 # pip install smbus2 qrcode requests pillow pyperclip
 # pip install RPi.GPIO
@@ -17,6 +38,7 @@ import io
 from datetime import datetime
 import RPi.GPIO as GPIO
 
+from urllib.parse import urlparse, parse_qs
 from PIL import Image, ImageTk
 
 # Define the I2C bus and the possible addresses of the DPS310
@@ -25,8 +47,16 @@ DPS310_ADDRESSES = [0x77, 0x76]
 PORT = 8080
 
 # Define GPIO pins
-PIN35 = 35
-PIN36 = 36
+PIN35 = 35   # distance 0
+PIN36 = 36   # distance 1
+PIN27 = 27   # button 0
+PIN29 = 29   # button 1
+PIN31 = 31   # LED 0
+PIN33 = 33    # LED 1
+
+
+gpio31 =-1
+gpio33 =-1
 
 class DPS:
     def __init__(self):
@@ -236,7 +266,11 @@ class SensorHTTPServer(BaseHTTPRequestHandler):
         'co2': [],
         'date_time': [],
         'gpio35': [],
-        'gpio36': []
+        'gpio36': [],
+        'gpio27': [],
+        'gpio29': [],
+        'gpio31': [],
+        'gpio33': []
     }
     
     @classmethod
@@ -250,12 +284,79 @@ class SensorHTTPServer(BaseHTTPRequestHandler):
         self.send_header('Content-type', 'application/json')
         self.end_headers()
 
-    def do_GET(self):
-        # Handle GET requests
-        query = self.path.split('=')[-1] if '=' in self.path else None
+    def do_GET(self): 
+
+        parsed_path = urlparse(self.path)
+        query_params = parse_qs(parsed_path.query)
+        # Handle GPIO settings
+        if 'gpio31' in query_params:
+            if query_params['gpio31'][0] == '0':
+                GPIO.output(31, GPIO.LOW)
+            elif query_params['gpio31'][0] == '1':
+                GPIO.output(31, GPIO.HIGH)
         
+        if 'gpio33' in query_params:
+            if query_params['gpio33'][0] == '0':
+                GPIO.output(33, GPIO.LOW)
+            elif query_params['gpio33'][0] == '1':
+                GPIO.output(33, GPIO.HIGH)
+
+        # Handle data queries
+        query = query_params.get('q', [None])[0]
         current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
+
+        if query == 'all':
+            data = self.handle_all()
+        elif query == 'temperature':
+            temperature = self.dps.read_temperature()
+            data = {'temperature': temperature, 'date_time': current_time}
+        elif query == 'pressure':
+            pressure = self.dps.read_pressure()
+            data = {'pressure': pressure, 'date_time': current_time}
+        elif query == 'co2':
+            co2_ppm = self.co2_sensor.measure_co2()
+            data = {'co2': co2_ppm, 'date_time': current_time}
+        elif query == 'distance':
+            data = self.handle_distance()
+        elif query == 'dashboard':
+            self.handle_dashboard()
+            return
+        elif query == 'history':
+            data = self.handle_history()
+        else:
+            self.send_response(400)
+            self.send_header('Content-type', 'text/html')
+            self.end_headers()
+            self.wfile.write(b"""
+                <html>
+                <head><title>Sensor Data Service</title></head>
+                <body>
+                    <h1>Sensor Data Service</h1>
+                    <p>Use the following queries to get data:</p>
+                    <ul>
+                        <li><a href="/?q=all">All data</a></li>
+                        <li><a href="/?q=temperature">Temperature data</a></li>
+                        <li><a href="/?q=pressure">Pressure data</a></li>
+                        <li><a href="/?q=co2">CO2 data</a></li>
+                        <li><a href="/?q=distance">Distance data</a></li>
+                        <li><a href="/?q=all&gpio31=1&gpio33=1">led0 off, led1 off</a></li>
+                        <li><a href="/?q=all&gpio31=0&gpio33=0">led0 on, led1 on</a></li>
+                        <li><a href="/?q=history">History data</a></li>
+                        <li><a href="/?q=dashboard">Dashboard</a></li>
+                    </ul>
+                </body>
+                </html>
+            """)
+            return
+
+        self._set_headers()
+        self.wfile.write(json.dumps(data).encode('utf-8'))
+        
+    def do_GET2(self):
+        # Handle GET requests
+        query = self.path.split('=')[-1] if '=' in self.path else None        
+        current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         if query == 'all':
             data = self.handle_all()
         elif query == 'temperature':
@@ -309,7 +410,7 @@ class SensorHTTPServer(BaseHTTPRequestHandler):
         self.send_header('Content-type', 'text/html')
         self.end_headers()
 
-    def handle_dashboard(self):
+    def handle_file(self):
         # Handle requests for the dashboard HTML page
         self._set_headers()
         try:
@@ -319,6 +420,13 @@ class SensorHTTPServer(BaseHTTPRequestHandler):
             self.send_response(404)
             self.wfile.write(b"404 Not Found: dashboard.html file is missing")
             
+    def handle_dashboard(self):
+            
+            self.send_response(200)
+            self.send_header('Content-type', 'text/html')
+            self.end_headers()
+            self.wfile.write(dashboard_content.encode('utf-8'))
+        
     def handle_all(self):
         # Handle requests for all sensor data
         current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
@@ -327,12 +435,24 @@ class SensorHTTPServer(BaseHTTPRequestHandler):
         co2_ppm = self.co2_sensor.measure_co2()
         gpio35 = GPIO.input(PIN35)
         gpio36 = GPIO.input(PIN36)
+        gpio27 = -1 #GPIO.input(PIN27)
+        gpio29 = GPIO.input(PIN29)
+        
+
+
+
+
+ 
         data = {
                 'temperature': temperature,
                 'pressure': pressure,
                 'co2': co2_ppm,
                 'gpio35': gpio35,
                 'gpio36': gpio36,
+                'gpio27': gpio27,
+                'gpio29': gpio29,
+                'gpio31': gpio31,
+                'gpio33': gpio33,
                 'date_time': current_time
         }
             
@@ -342,6 +462,10 @@ class SensorHTTPServer(BaseHTTPRequestHandler):
         self.historical_data['co2'].append(co2_ppm)
         self.historical_data['gpio35'].append(gpio35)
         self.historical_data['gpio36'].append(gpio36)
+        self.historical_data['gpio27'].append(gpio27)
+        self.historical_data['gpio29'].append(gpio29)
+        self.historical_data['gpio31'].append(gpio31)
+        self.historical_data['gpio33'].append(gpio33)
         self.historical_data['date_time'].append(current_time)
 
         # Ensure only the last 50 records are kept
@@ -351,6 +475,10 @@ class SensorHTTPServer(BaseHTTPRequestHandler):
             self.historical_data['co2'].pop(0)
             self.historical_data['gpio35'].pop(0)
             self.historical_data['gpio36'].pop(0)
+            self.historical_data['gpio27'].pop(0)
+            self.historical_data['gpio29'].pop(0)
+            self.historical_data['gpio31'].pop(0)
+            self.historical_data['gpio33'].pop(0)
             self.historical_data['date_time'].pop(0)
 
         return data
@@ -361,6 +489,10 @@ class SensorHTTPServer(BaseHTTPRequestHandler):
             'temperature': self.historical_data['temperature'],
             'pressure': self.historical_data['pressure'],
             'co2': self.historical_data['co2'],
+            'gpio27': self.historical_data['gpio27'],
+            'gpio29': self.historical_data['gpio29'],
+            'gpio31': self.historical_data['gpio31'],
+            'gpio33' : self.historical_data['gpio33'],
             'gpio35': self.historical_data['gpio35'],
             'gpio36': self.historical_data['gpio36'],
             'date_time': self.historical_data['date_time']
@@ -369,11 +501,15 @@ class SensorHTTPServer(BaseHTTPRequestHandler):
     
     def handle_distance(self):
         # Handle requests for GPIO pin data
-        gpio35 = GPIO.input(PIN35)
-        gpio36 = GPIO.input(PIN36)
+        gpio35 = GPIO.input(PIN35)  # distance 0
+        gpio36 = GPIO.input(PIN36) # distance 1
+        gpio27 = GPIO.input(PIN27)  # button 0
+        gpio29 = GPIO.input(PIN29) # button 1
         data = {
             'gpio35': gpio35,
             'gpio36': gpio36,
+            'gpio27': gpio27,
+            'gpio29': gpio29,
             'date_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         }
         return data
@@ -416,7 +552,9 @@ class WebUI:
         qr.add_data(url)
         qr.make(fit=True)
         qr_img = qr.make_image(fill="black", back_color="white")
-        qr_img = qr_img.resize((100, 100), Image.ANTIALIAS)  # Resize to 100x100 pixels
+        # qr_img = qr_img.resize((100, 100), Image.ANTIALIAS)  # Resize to 100x100 pixels
+        qr_img = qr_img.resize((100, 100), Image.LANCZOS)
+
         qr_img_bytes = io.BytesIO()
         qr_img.save(qr_img_bytes, format="PNG")
         qr_img_bytes.seek(0)
@@ -439,12 +577,12 @@ class WebUI:
 
     def copy_private_ip(self):
         # Copy private IP address to clipboard
-        pyperclip.copy(f"{self.private_ip}:{PORT}")
+        pyperclip.copy(f"http://{self.private_ip}:{PORT}")
         self.update_log("Private IP copied to clipboard")
 
     def copy_public_ip(self):
         # Copy public IP address to clipboard
-        pyperclip.copy(f"{self.public_ip}:{PORT}")
+        pyperclip.copy(f"http://{self.public_ip}:{PORT}")
         self.update_log("Public IP copied to clipboard")
 
     def run(self):
@@ -479,9 +617,16 @@ if __name__ == "__main__":
 
         
     # Setup GPIO pins
+    GPIO.setwarnings(False) 
     GPIO.setmode(GPIO.BOARD)
     GPIO.setup(PIN35, GPIO.IN)
     GPIO.setup(PIN36, GPIO.IN)
+    # GPIO.setup(PIN27, GPIO.IN)# button 0
+    GPIO.setup(PIN29, GPIO.IN)# button 1
+    GPIO.setup(PIN31, GPIO.OUT)   # LED 0
+    GPIO.setup(PIN33, GPIO.OUT)    # LED 1
+
+
 
     # Start the Tkinter GUI
     web_ui = WebUI(private_ip, public_ip)
@@ -496,5 +641,144 @@ if __name__ == "__main__":
     web_ui.run()
 
 
+dashboard_content = """
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>Dashboard</title>
+                <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+                <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+                <script type="text/javascript" src="https://www.gstatic.com/charts/loader.js"></script>
+                <script type="text/javascript">
+                    google.charts.load('current', {'packages':['corechart']});
+                    google.charts.setOnLoadCallback(initDashboard);
 
+                    var temperatureData = [['Time', 'Temperature']];
+                    var pressureData = [['Time', 'Pressure']];
+                    var co2Data = [['Time', 'CO2']];
+                    var gpioData = [['Time', 'GPIO 35', 'GPIO 36']];
+                    var intervalId;
+                    var fetchInterval = 5000; // Default interval of 5 seconds
+
+                    function initDashboard() {
+                        $('#intervalDropdown').val(fetchInterval);
+                        $('#intervalDropdown').change(function() {
+                            fetchInterval = $(this).val();
+                            clearInterval(intervalId);
+                            intervalId = setInterval(fetchData, fetchInterval);
+                        });
+
+                        fetchData();
+                        intervalId = setInterval(fetchData, fetchInterval);
+                    }
+
+                    function fetchData() {
+                        $.getJSON("/?q=all", function(data) {
+                            updateChartData(temperatureData, data.temperature, data.date_time, 'temperature_chart', 'Temperature History', 'latest_temperature');
+                            updateChartData(pressureData, data.pressure, data.date_time, 'pressure_chart', 'Pressure History', 'latest_pressure');
+                            updateChartData(co2Data, data.co2, data.date_time, 'co2_chart', 'CO2 History', 'latest_co2');
+                            updateGPIOData(gpioData, data.gpio35, data.gpio36, data.date_time, 'gpio_chart', 'GPIO Pins History', 'latest_gpio');
+                        });
+                    }
+
+                    function updateChartData(chartData, newData, currentTime, elementId, title, latestElementId) {
+                        var time = currentTime.split(' ')[1];
+
+                        chartData.push([time, newData]);
+                        if (chartData.length > 51) {
+                            chartData.splice(1, 1); // Remove the oldest data point
+                        }
+
+                        var dataTable = google.visualization.arrayToDataTable(chartData);
+                        var options = {
+                            title: title,
+                            curveType: 'function',
+                            legend: { position: 'bottom' }
+                        };
+                        var chart = new google.visualization.LineChart(document.getElementById(elementId));
+                        chart.draw(dataTable, options);
+
+                        document.getElementById(latestElementId).innerText = `Latest Value: ${newData} at ${currentTime}`;
+                    }
+
+                    function updateGPIOData(chartData, newGpio35, newGpio36, currentTime, elementId, title, latestElementId) {
+                        var time = currentTime.split(' ')[1];
+
+                        chartData.push([time, newGpio35, newGpio36]);
+                        if (chartData.length > 51) {
+                            chartData.splice(1, 1); // Remove the oldest data point
+                        }
+
+                        var dataTable = google.visualization.arrayToDataTable(chartData);
+                        var options = {
+                            title: title,
+                            curveType: 'function',
+                            legend: { position: 'bottom' }
+                        };
+                        var chart = new google.visualization.LineChart(document.getElementById(elementId));
+                        chart.draw(dataTable, options);
+
+                        document.getElementById(latestElementId).innerText = `Latest Values: GPIO 35: ${newGpio35}, GPIO 36: ${newGpio36} at ${currentTime}`;
+                    }
+                </script>
+            </head>
+            <body>
+                <div class="container mt-5">
+                    <h1 class="mb-4">Dashboard</h1>
+                    <div class="row mb-3">
+                        <div class="col-md-3">
+                            <label for="intervalDropdown" class="form-label">Fetch Interval (seconds)</label>
+                            <select id="intervalDropdown" class="form-select">
+                                <option value="1000">1</option>
+                                <option value="2000">2</option>
+                                <option value="3000">3</option>
+                                <option value="4000">4</option>
+                                <option value="5000" selected>5</option>
+                                <option value="10000">10</option>
+                                <option value="15000">15</option>
+                            </select>
+                        </div>
+                    </div>        
+                    <hr>
+                    <div class="row">
+                        <div class="col-md-12">
+                            <h2>Temperature</h2>
+                            <p id="latest_temperature" class="text-center"></p>
+                            <div id="temperature_chart" style="width: 100%; height: 500px;"></div>
+                            <hr>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-12">
+                            <h2>Pressure</h2>
+                            <p id="latest_pressure" class="text-center"></p>
+                            <div id="pressure_chart" style="width: 100%; height: 500px;"></div>
+                            <hr>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-12">
+                            <h2>Co2</h2>
+                            <p id="latest_co2" class="text-center"></p>
+                            <div id="co2_chart" style="width: 100%; height: 500px;"></div>
+                            <hr>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-12">
+                            <h2>GPIO Pins</h2>
+                            <p id="latest_gpio" class="text-center"></p>
+                            <div id="gpio_chart" style="width: 100%; height: 500px;"></div>
+                            <hr>
+                        </div>
+                    </div>
+                    <footer class="text-center mt-4">
+                        <p>1999 - 2024 Infineon Technologies AG ,  GPL v2, Developer: Powen Ko</p>
+                    </footer>
+                </div>
+
+                <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+            </body>
+            </html>
+            """
 
